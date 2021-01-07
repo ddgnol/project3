@@ -41,7 +41,6 @@ configuration TestCM5000C {
 implementation {
   components MainC, TestCM5000P as App, LedsC;
 
-
 	// Main c  
   MainC.Boot <- App;
 	App.Leds 					-> LedsC;
@@ -49,20 +48,18 @@ implementation {
 	// Radio
 	components ActiveMessageC as Radio;
   App.RadioControl 	-> Radio;
-  App.RadioAMPacket -> Radio;
+  
   components new AMSenderC(TestCM5000_AM_ID);
 	App.ThlSend 	-> AMSenderC;
 	App.Packet 		-> AMSenderC;
  
 	// Timers
 	components new TimerMilliC() as SampleTimer;
-  components new TimerMilliC() as AckTimer;
 	App.SampleTimer 	-> SampleTimer;
-  App.AckTimer -> AckTimer;
-
+ 
  // Sensors
-	//components new Msp430InternalVoltageC() as SensorVref;  // Voltage    
-  //App.Vref -> SensorVref;
+	components new Msp430InternalVoltageC() as SensorVref;  // Voltage    
+  App.Vref -> SensorVref;
  
   components new SensirionSht11C() as SensorHT;           // Humidity/Temperature    
   App.Temperature 	-> SensorHT.Temperature;  
@@ -71,9 +68,7 @@ implementation {
   components new HamamatsuS1087ParC() as SensorPhoto; 	  // Photosynthetically Active Radiation
   App.Photo 				-> SensorPhoto;
 
-  //components new HamamatsuS10871TsrC() as SensorTotal;    // Total Solar Radiation  
-  //App.Radiation 		-> SensorTotal;
-
-  App.RadioReceive -> Radio.Receive;
+  components new HamamatsuS10871TsrC() as SensorTotal;    // Total Solar Radiation  
+  App.Radiation 		-> SensorTotal;
  
 }

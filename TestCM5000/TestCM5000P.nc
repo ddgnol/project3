@@ -36,8 +36,7 @@
  * @author: Advanticsys <info@advanticsys.com>
 *****************************************************************************************/
 
-
-#include"TestCM5000.h"
+#include "TestCM5000.h"
 
 module TestCM5000P @safe() {
   uses {
@@ -50,21 +49,18 @@ module TestCM5000P @safe() {
     interface SplitControl as RadioControl;
     interface AMSend		   as ThlSend;
 		interface Packet;
-	interface Receive as RadioReceive[am_id_t id];
-	interface AMPacket as RadioAMPacket;
+	
+	
 
 		// Timers
 		interface Timer<TMilli>  as SampleTimer;
-		interface Timer<TMilli>  as AckTimer;
 		
 		// Sensors    
-		//interface Read<uint16_t> as Vref;
+		interface Read<uint16_t> as Vref;
   	interface Read<uint16_t> as Temperature;    
   	interface Read<uint16_t> as Humidity;    
 		interface Read<uint16_t> as Photo;
-		//interface Read<uint16_t> as Radiation;
-
-
+		interface Read<uint16_t> as Radiation;
   }
 }
 
@@ -77,8 +73,6 @@ implementation
 	uint8_t   numsensors;
 	THL_msg_t data;
 	message_t auxmsg;
-
-	ack_m* ack_message;
 	
 /*****************************************************************************************
  * Task & function declaration
@@ -91,87 +85,59 @@ implementation
 
   event void Boot.booted() {
   	call SampleTimer.startPeriodic(DEFAULT_TIMER); // Start timer
-	call RadioControl.start();
   }
 
 /*****************************************************************************************
  * Timers
 *****************************************************************************************/
-	
 
-message_t* ONE receive(message_t* ONE msg, void* payload, uint8_t len);
-
-event message_t *RadioReceive.receive[am_id_t id](message_t *msg,
-						    void *payload,
-						    uint8_t len) {
-    return receive(msg, payload, len);
-  }
-
- message_t* receive(message_t *msg, void *payload, uint8_t len) {
-	
-    message_t *ret = msg;
-	am_addr_t addr;
-    addr = call RadioAMPacket.destination(ret);
-	if(addr==TOS_NODE_ID){
-		ack_message = (ack_m*) payload;
-		call Leds.led2Toggle();
-		call AckTimer.stop();
-		call SampleTimer.startPeriodic(10240);
-	}
-    return ret;
-  }
-
-  event void SampleTimer.fired() {
+	event void SampleTimer.fired() {
 		numsensors = 0;
-		//call Vref.read();
+		call Vref.read();
 		call Temperature.read();
 		call Humidity.read();
 		call Photo.read();
-		//call Radiation.read();
+		call Radiation.read();
 	}
+	
 /*****************************************************************************************
  * Sensors
 *****************************************************************************************/
-	/*
+
 	event void Vref.readDone(error_t result, uint16_t value) {
     data.vref = value;										// put data into packet 
 		if (++numsensors == MAX_SENSORS) {		
 			call RadioControl.start();					// start radio if this is last sensor
 		}
   }
-	*/
+
 	event void Temperature.readDone(error_t result, uint16_t value) {
     data.temperature = value;							// put data into packet 
 		if (++numsensors == MAX_SENSORS) {		
-			//call RadioControl.start();					// start radio if this is last sensor
-			post sendThlMsg();
+			call RadioControl.start();					// start radio if this is last sensor
 		}
 	}
 
 	event void Humidity.readDone(error_t result, uint16_t value) {
     data.humidity = value;								// put data into packet 
 		if (++numsensors == MAX_SENSORS) {		
-			//call RadioControl.start();					// start radio if this is last sensor
-			post sendThlMsg();
+			call RadioControl.start();					// start radio if this is last sensor
 		}
   }    
 
 	event void Photo.readDone(error_t result, uint16_t value) {
     data.photo = value;										// put data into packet 
 		if (++numsensors == MAX_SENSORS) {		
-			//call RadioControl.start();					// start radio if this is last sensor
-			post sendThlMsg();
+			call RadioControl.start();					// start radio if this is last sensor
 		}
   }  
-  /*
+  
 	event void Radiation.readDone(error_t result, uint16_t value) {
     data.radiation = value;								// put data into packet 
 		if (++numsensors == MAX_SENSORS) {		
-			//call RadioControl.start();					// start radio if this is last sensor
-			post sendThlMsg();
+			call RadioControl.start();					// start radio if this is last sensor
 		}
   }
-  */
 
 /*****************************************************************************************
  * Radio
@@ -179,7 +145,7 @@ event message_t *RadioReceive.receive[am_id_t id](message_t *msg,
 
 	event void RadioControl.startDone(error_t err) {
 		if (err == SUCCESS) {	
-			//post sendThlMsg();					// Radio started successfully, send message
+			post sendThlMsg();					// Radio started successfully, send message
 		}else	{
 			call RadioControl.start();
 		}
@@ -187,26 +153,23 @@ event message_t *RadioReceive.receive[am_id_t id](message_t *msg,
 
 	task void sendThlMsg()	{
 		THL_msg_t* aux;
-		aux = (THL_msg_t*) call Packet.getPayload(&auxmsg, sizeof(THL_msg_t));
+		aux = (THL_msg_t*)
+		call Packet.getPayload(&auxmsg, sizeof(THL_msg_t));
 					
-		//aux -> vref 			 = data.vref;
+		aux -> vref 			 = data.vref;
 		aux -> temperature = data.temperature;
 		aux -> humidity		 = data.humidity;
 		aux -> photo       = data.photo; 
-		//aux -> radiation	 = data.radiation; 			
+		aux -> radiation	 = data.radiation; 			
 							
-		if (call ThlSend.send(0x0009, &auxmsg, sizeof(THL_msg_t))!= SUCCESS)	{ //AM_BROADCAST_ADDR
+		if (call ThlSend.send(AM_BROADCAST_ADDR, &auxmsg, sizeof(THL_msg_t))!= SUCCESS)	{
 			post sendThlMsg();
 		}
-		call Leds.led0On();
 	}
 	
 	event void ThlSend.sendDone(message_t* msg, error_t error) {
 		if (error == SUCCESS)	{
-			call Leds.led0Off();
-			call SampleTimer.stop();
-			call AckTimer.startPeriodic(2048);
-			//call RadioControl.stop();	// Msg sent, stop radio
+			call RadioControl.stop();	// Msg sent, stop radio
 		}else
 		{
 			post sendThlMsg();
@@ -219,10 +182,6 @@ event message_t *RadioReceive.receive[am_id_t id](message_t *msg,
 		}
 	}
 
-	event void AckTimer.fired(){
-		call Leds.led1Toggle();
-		post sendThlMsg();
-		//call RadioControl.stop();
-	}
+
 
 }// End  
